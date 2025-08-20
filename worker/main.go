@@ -1,49 +1,21 @@
 package main
 
 import (
-	"context"
-	"log"
-	"sync"
-
-	"github.com/Rahul-RB/go-jobqueue/constants"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
+	"github.com/Rahul-RB/go-jobqueue/routes"
+	"github.com/Rahul-RB/go-jobqueue/utils"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	nc, err := nats.Connect(nats.DefaultURL, nats.Name("Worker"))
-	if err != nil {
-		log.Fatal("Failed to connect to NATS:", err)
-	}
-	defer nc.Close()
+	router := gin.Default()
+	router.Use(utils.InjectNats(utils.CreateStreamAndConsumer()))
 
-	ctx := context.Background()
-	js, err := jetstream.New(nc)
-	if err != nil {
-		log.Fatal("Failed to create jetstream object:", err)
-	}
+	v1Router := router.Group("/v1")
+	v1Router.POST("/job", routes.PostJob)   // Create a job
+	v1Router.GET("/job/:id", routes.GetJob) // Get job metadata
+	// v1Router.GET("/job/:id/output")       // Get job metadata
+	// v1Router.DELETE("/job/:id")           // Delete the job
 
-	stream, err := js.Stream(ctx, constants.StreamName)
-	if err != nil {
-		log.Fatal("Failed to connect to test_stream:", err)
-	}
+	router.Run(":3000")
 
-	consumer, err := stream.Consumer(ctx, constants.ConsumerName)
-	if err != nil {
-		log.Fatal("Failed to create consumer:", err)
-	}
-
-	var wg sync.WaitGroup
-	cctx, err := consumer.Consume(func(msg jetstream.Msg) {
-		log.Printf("Received subject: %v message: %v", msg.Subject(), string(msg.Data()))
-		if err := msg.Ack(); err != nil {
-			log.Fatal("Failed to ack:", err)
-		}
-	})
-	if err != nil {
-		log.Fatal("Failed to consume:", err)
-	}
-	defer cctx.Stop()
-	wg.Add(1)
-	wg.Wait()
 }
