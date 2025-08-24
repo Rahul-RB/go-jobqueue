@@ -11,6 +11,7 @@ import (
 	"github.com/Rahul-RB/go-jobqueue/stream"
 	"github.com/Rahul-RB/go-jobqueue/utils"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 type Job struct {
@@ -36,7 +37,7 @@ func (j *Job) Run() {
 	// get output of job
 	// publish that to Stream
 	ctx := context.Background()
-	cmd, err := utils.RunWithTimeout("/home/rahulrb/go-jobqueue/dummy-job/dummy-job.bin", "-name", j.Name, "-interval", "1s")
+	cmd, err := utils.RunWithTimeout("./dummy-job/dummy-job", "-name", j.Name, "-interval", "1s")
 	if err != nil {
 		log.Fatal("Failed to run command:", err.Error())
 		if err := j.stream.Publish(ctx, j.Name, err.Error()); err != nil {
@@ -66,4 +67,8 @@ func NewJob(s *stream.Stream) *Job {
 	}
 	jobs[j.Id] = j
 	return j
+}
+
+func (j *Job) StartConsumer(w *websocket.Conn) error {
+	return j.stream.StartNewConsumer(j.Id, w)
 }

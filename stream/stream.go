@@ -3,19 +3,30 @@ package stream
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/Rahul-RB/go-jobqueue/constants"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
 type Stream struct {
 	natsConn      *nats.Conn
-	natsStreamObj *jetstream.JetStream
-	natsConsumer  *jetstream.Consumer
+	natsJetStream *jetstream.JetStream
+	natsStream    jetstream.Stream
+}
+
+type StreamSession struct {
+	isClosed     bool
+	jobId        string
+	natsConsumer jetstream.Consumer
+	wsConn       *websocket.Conn
+	messages     chan []byte
 }
 
 func NewStream() *Stream {
@@ -40,21 +51,11 @@ func NewStream() *Stream {
 		log.Fatal("Failed to create a stream on jetstream:", err)
 	}
 
-	// Create one consumer
-	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:    constants.ConsumerName,
-		Durable: constants.ConsumerName,
-	})
-	if err != nil {
-		log.Fatal("Failed to create consumer:", err)
-	}
-
 	return &Stream{
 		natsConn:      nc,
-		natsStreamObj: &js,
-		natsConsumer:  &consumer,
+		natsJetStream: &js,
+		natsStream:    stream,
 	}
-
 }
 
 func InjectStream(s *Stream) gin.HandlerFunc {
@@ -68,8 +69,79 @@ func (s *Stream) Publish(ctx context.Context, sub string, msg string) error {
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
-	if _, err := (*s.natsStreamObj).Publish(ctx, sub, []byte(msg)); err != nil {
+	if _, err := (*s.natsJetStream).Publish(ctx, sub, []byte(msg)); err != nil {
 		return errors.New("failed to publish on" + sub + ":" + err.Error())
 	}
+	return nil
+}
+
+func (s *StreamSession) Read() {
+	var cctx jetstream.ConsumeContext
+	var wg sync.WaitGroup
+	cctx, err := s.natsConsumer.Consume(func(message jetstream.Msg) {
+		data := message.Data()
+		if err := message.Ack(); err != nil {
+			log.Println(s.jobId, "failed to ack:", err)
+			return
+		}
+		if s.isClosed {
+			log.Println(s.jobId, "has closed")
+			s.isClosed = true
+			close(s.messages)
+			cctx.Stop()
+			s.wsConn.Close()
+			wg.Done()
+			return
+		}
+		s.messages <- data
+	})
+	if err != nil {
+		log.Println(s.jobId, "failed to consume:", err)
+		return
+	}
+	wg.Add(1)
+	wg.Wait()
+}
+
+func (s *StreamSession) Write() {
+	defer func() {
+		log.Println(s.jobId, "job consumer closed via write")
+		s.isClosed = true
+		s.wsConn.Close()
+	}()
+
+	for message := range s.messages {
+		log.Println(s.jobId, "got message:", string(message))
+		if s.isClosed {
+			return
+		}
+		if s.wsConn.WriteMessage(websocket.TextMessage, message) != nil {
+			return
+		}
+	}
+}
+
+func (s *Stream) StartNewConsumer(id string, w *websocket.Conn) error {
+	ctx := context.Background()
+	consumerName := fmt.Sprintf("%v_%v", "job_output_stream_consumer", time.Now().Unix())
+	consumer, err := s.natsStream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Name:    consumerName,
+		Durable: consumerName,
+	})
+	if err != nil {
+		return err
+	}
+
+	session := &StreamSession{
+		isClosed:     false,
+		jobId:        id,
+		natsConsumer: consumer,
+		wsConn:       w,
+		messages:     make(chan []byte, 256),
+	}
+
+	go session.Read()
+	go session.Write()
+
 	return nil
 }
