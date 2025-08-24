@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+
 	"github.com/Rahul-RB/go-jobqueue/routes"
 	"github.com/Rahul-RB/go-jobqueue/stream"
 	"github.com/gin-gonic/gin"
@@ -9,6 +11,11 @@ import (
 func main() {
 	router := gin.Default()
 	router.Use(stream.InjectStream(stream.NewStream()))
+	router.Static("/ui", "./ui")
+	router.LoadHTMLFiles("ui/index.html")
+	router.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", gin.H{})
+	})
 
 	v1Router := router.Group("/v1")
 	v1Router.POST("/job", routes.PostJob)   // Create a job
