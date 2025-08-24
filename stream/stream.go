@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/Rahul-RB/go-jobqueue/constants"
@@ -77,7 +76,6 @@ func (s *Stream) Publish(ctx context.Context, sub string, msg string) error {
 
 func (s *StreamSession) Read() {
 	var cctx jetstream.ConsumeContext
-	var wg sync.WaitGroup
 	cctx, err := s.natsConsumer.Consume(func(message jetstream.Msg) {
 		data := message.Data()
 		if err := message.Ack(); err != nil {
@@ -90,7 +88,6 @@ func (s *StreamSession) Read() {
 			close(s.messages)
 			cctx.Stop()
 			s.wsConn.Close()
-			wg.Done()
 			return
 		}
 		s.messages <- data
@@ -99,8 +96,6 @@ func (s *StreamSession) Read() {
 		log.Println(s.jobId, "failed to consume:", err)
 		return
 	}
-	wg.Add(1)
-	wg.Wait()
 }
 
 func (s *StreamSession) Write() {
