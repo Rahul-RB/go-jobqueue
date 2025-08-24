@@ -5,21 +5,26 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sync"
 
 	"github.com/Rahul-RB/go-jobqueue/constants"
+	"github.com/Rahul-RB/go-jobqueue/stream"
 	"github.com/Rahul-RB/go-jobqueue/utils"
 	"github.com/google/uuid"
 )
 
 type Job struct {
-	Id       string      `json:"id"`
-	Name     string      `json:"name"`
-	NatsConn *utils.Nats `json:"-"`
+	Id     string         `json:"id"`
+	Name   string         `json:"name"`
+	stream *stream.Stream `json:"-"`
 }
 
 var jobs map[string]*Job = make(map[string]*Job)
+var jobLock sync.Mutex
 
 func GetJob(id string) (*Job, error) {
+	jobLock.Lock()
+	defer jobLock.Unlock()
 	if j, ok := jobs[id]; ok {
 		return j, nil
 	}
@@ -29,19 +34,19 @@ func GetJob(id string) (*Job, error) {
 func (j *Job) Run() {
 	// run job
 	// get output of job
-	// publish that to NatsConn
+	// publish that to Stream
 	ctx := context.Background()
 	cmd, err := utils.RunWithTimeout("/home/rahulrb/go-jobqueue/dummy-job/dummy-job.bin", "-name", j.Name, "-interval", "1s")
 	if err != nil {
 		log.Fatal("Failed to run command:", err.Error())
-		if err := j.NatsConn.Publish(ctx, j.Name, err.Error()); err != nil {
+		if err := j.stream.Publish(ctx, j.Name, err.Error()); err != nil {
 			log.Fatal("Failed to publish to:", j.Name, err.Error())
 		}
 	}
 
 	scanner := bufio.NewScanner(*cmd.Stdout)
 	for scanner.Scan() {
-		if err := j.NatsConn.Publish(ctx, j.Name, scanner.Text()); err != nil {
+		if err := j.stream.Publish(ctx, j.Name, scanner.Text()); err != nil {
 			log.Fatal("Failed to publish to:", j.Name, err.Error())
 		}
 	}
@@ -49,13 +54,15 @@ func (j *Job) Run() {
 	cmd.Cmd.Wait()
 }
 
-func NewJob(nc *utils.Nats) *Job {
+func NewJob(s *stream.Stream) *Job {
+	jobLock.Lock()
+	defer jobLock.Unlock()
 	_id := uuid.New()
 	id := _id.String()
 	j := &Job{
-		Id:       id,
-		NatsConn: nc,
-		Name:     constants.SubjectName + "." + id,
+		Id:     id,
+		stream: s,
+		Name:   constants.SubjectName + "." + id,
 	}
 	jobs[j.Id] = j
 	return j

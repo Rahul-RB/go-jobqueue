@@ -5,12 +5,12 @@ import (
 	"net/http"
 
 	"github.com/Rahul-RB/go-jobqueue/jobs"
-	"github.com/Rahul-RB/go-jobqueue/utils"
+	"github.com/Rahul-RB/go-jobqueue/stream"
 	"github.com/gin-gonic/gin"
 )
 
 func PostJob(c *gin.Context) {
-	j := jobs.NewJob(c.MustGet("nats").(*utils.Nats))
+	j := jobs.NewJob(c.MustGet("stream").(*stream.Stream))
 	go j.Run()
 
 	c.IndentedJSON(http.StatusOK, j)

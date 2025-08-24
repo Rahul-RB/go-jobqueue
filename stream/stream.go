@@ -1,4 +1,4 @@
-package utils
+package stream
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-type Nats struct {
-	NatsConn *nats.Conn
-	Stream   *jetstream.Stream
-	Consumer *jetstream.Consumer
+type Stream struct {
+	natsConn      *nats.Conn
+	natsStreamObj *jetstream.JetStream
+	natsConsumer  *jetstream.Consumer
 }
 
-func CreateStreamAndConsumer() *Nats {
+func NewStream() *Stream {
 	nc, err := nats.Connect(nats.DefaultURL, nats.Name("Worker"))
 	if err != nil {
 		log.Fatal("Failed to connect to NATS:", err)
@@ -49,32 +49,27 @@ func CreateStreamAndConsumer() *Nats {
 		log.Fatal("Failed to create consumer:", err)
 	}
 
-	return &Nats{
-		NatsConn: nc,
-		Stream:   &stream,
-		Consumer: &consumer,
+	return &Stream{
+		natsConn:      nc,
+		natsStreamObj: &js,
+		natsConsumer:  &consumer,
 	}
 
 }
 
-func InjectNats(n *Nats) gin.HandlerFunc {
+func InjectStream(s *Stream) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Set("nats", n)
+		c.Set("stream", s)
 		c.Next()
 	}
 }
 
-func (n *Nats) Publish(ctx context.Context, s string, msg string) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+func (s *Stream) Publish(ctx context.Context, sub string, msg string) error {
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
-	js, err := jetstream.New(n.NatsConn)
-	if err != nil {
-		return errors.New("failed to create jetstream object:" + err.Error())
-	}
 
-	_, err = js.Publish(ctx, s, []byte(msg))
-	if err != nil {
-		return errors.New("failed to publish on" + s + ":" + err.Error())
+	if _, err := (*s.natsStreamObj).Publish(ctx, sub, []byte(msg)); err != nil {
+		return errors.New("failed to publish on" + sub + ":" + err.Error())
 	}
 	return nil
 }

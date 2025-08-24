@@ -2,13 +2,13 @@ package main
 
 import (
 	"github.com/Rahul-RB/go-jobqueue/routes"
-	"github.com/Rahul-RB/go-jobqueue/utils"
+	"github.com/Rahul-RB/go-jobqueue/stream"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	router := gin.Default()
-	router.Use(utils.InjectNats(utils.CreateStreamAndConsumer()))
+	router.Use(stream.InjectStream(stream.NewStream()))
 
 	v1Router := router.Group("/v1")
 	v1Router.POST("/job", routes.PostJob)   // Create a job
