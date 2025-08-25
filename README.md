@@ -1,7 +1,8 @@
 # go-jobqueue
-Distributed job queue written in Go using NATS
+Distributed job queue written in Go using NATS, Traefik and Docker.
 
-## Prerequisites
+## Running for development
+### Prerequisites
 - Run NATS with jetstream
 ```
 docker network create nats
@@ -9,16 +10,17 @@ docker run --name nats --network nats --rm -p 4222:4222 -p 8222:8222 nats --http
 ```
 - Create the dummy job binary:
 ```
-cd dummy-job
+cd go-jobqueue/dummy-job
 go build .
 ```
 
-## Run worker
+### Run worker
 ```bash
-go run ./worker
+cd go-jobqueue
+go run .
 ```
 
-## Trigger a job
+### Trigger a job
 
 Each job gets a new Job ID (uuid4)
 ```bash
@@ -30,7 +32,7 @@ curl -X POST http://localhost:3000/v1/job
 }
 ```
 
-## Get metadata about the job
+### Get metadata about the job
 ```
 curl -X GET http://localhost:3000/v1/job/<job-id> && echo
 {
@@ -39,7 +41,7 @@ curl -X GET http://localhost:3000/v1/job/<job-id> && echo
 }
 ```
 
-## Stream job output
+### Stream job output
 This can be done via a websocket client. The easiest way is to:
 - open up the browser
 - point it towards localhost:3000
@@ -50,7 +52,7 @@ This can be done via a websocket client. The easiest way is to:
 Note: Each new websocket client will read the job output from the very beginning.
 
 
-## Running in production
+## Running for production
 ### Prerequisites
 - Docker and docker compose
 - NATS
