@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:3000/v1"; // change if needed
+const API_BASE = "/v1"; // Use relative URL for load balancer
 
 function appendOutput(msg) {
   const out = document.getElementById("output");
@@ -24,7 +24,10 @@ document.getElementById("getJob").onclick = async () => {
 document.getElementById("streamOutput").onclick = () => {
   const id = document.getElementById("jobIdInput").value;
   if (!id) return alert("Enter Job ID");
-  const ws = new WebSocket(`ws://localhost:3000/v1/job/${id}/output`);
+  
+  // Use relative URL for WebSocket connection
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${window.location.host}/v1/job/${id}/output`);
   ws.onmessage = (event) => appendOutput(event.data);
   ws.onopen = () => appendOutput("📡 Connected to output stream...");
   ws.onclose = () => appendOutput("❌ Stream closed");

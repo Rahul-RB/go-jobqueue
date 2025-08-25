@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/Rahul-RB/go-jobqueue/constants"
@@ -29,7 +30,15 @@ type StreamSession struct {
 }
 
 func NewStream() *Stream {
-	nc, err := nats.Connect(nats.DefaultURL, nats.Name("Worker"))
+	// Get NATS URL from environment variable, default to Docker service name
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://nats:4222" // Docker service name as default
+	}
+
+	log.Printf("Connecting to NATS at: %s", natsURL)
+
+	nc, err := nats.Connect(natsURL, nats.Name("Worker"))
 	if err != nil {
 		log.Fatal("Failed to connect to NATS:", err)
 	}
