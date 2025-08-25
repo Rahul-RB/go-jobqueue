@@ -1,0 +1,59 @@
+services:
+  # NATS server with JetStream
+  nats:
+    image: nats:latest
+    container_name: nats
+    command: --http_port 8222 -js  # Enable JetStream
+    ports:
+      - "4222:4222"  # NATS client port
+      - "8222:8222"  # NATS monitoring port
+    networks:
+      - go-jobqueue-network
+    restart: unless-stopped
+
+  # Application service
+  app:
+    build: .
+    image: go-jobqueue:latest
+    environment:
+      - GIN_MODE=release
+      - NATS_URL=nats://nats:4222
+    networks:
+      - go-jobqueue-network
+    depends_on:
+      - nats
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.go-jobqueue.rule=Host(`localhost`)"
+      - "traefik.http.services.go-jobqueue.loadbalancer.server.port=3000"
+      - "traefik.http.routers.go-jobqueue.entrypoints=web"
+
+  # Traefik load balancer
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS
+      # - "8080:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - go-jobqueue-network
+    depends_on:
+      - app
+    restart: unless-stopped
+
+networks:
+  go-jobqueue-network:
+    driver: bridge
+
+
