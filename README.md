@@ -177,6 +177,15 @@ make down
 docker system prune -f
 ```
 
+## Notes about NATS settings
+- We create a single common stream across all jobs (check constants/constants.go).
+- In a stream, each new job gets a new subject name.
+- A stream consumer belongs to a stream and not to the subject inside the stream. As such, a stream consumer will get messages across all subjects.
+- A client who is consuming messages from the consumer has to ACK each message. If it fails to ACK, then NATS makes it available to the next consumer again after a default 30 seconds timeout.
+- For each request to stream output, a brand new consumer is created.
+    - This is done since each NATS consumer gets logs from the very beginning of the job.
+    - If we share a single consumer for a job, then all parallel requests to stream output will get differing outputs (i.e. if 2 people are watching a stock and the stock goes 1,3,4,2,5, one of the watchers will geet 1,4,5  while the other gets 3,2 ).
+
 ## TODO
 - filter job output stream by job ID
 - keep a limit on number of messages in NATS stream
